@@ -296,6 +296,7 @@ void operation_report()
   char * pos = NULL;
   char * token;
   uint64_t used = 0;
+  uint64_t used_dups = 0;
 
   if (report_format == REPORT_FORMAT_TEXT) {
     printf("\n");
@@ -356,6 +357,7 @@ void operation_report()
           case REPORT_FORMAT_CSV:   print_path(",", token); break;
           case REPORT_FORMAT_JSON:  print_path(", ", token); break;
           }
+          used_dups += each_size;
         }
       }
 
@@ -372,7 +374,12 @@ void operation_report()
     uint64_t kb = used / 1024;
     uint64_t mb = kb / 1024;
     uint64_t gb = mb / 1024;
+    uint64_t kb_dups = used_dups / 1024;
+    uint64_t mb_dups = kb_dups / 1024;
+    uint64_t gb_dups = mb_dups / 1024;
 
+    printf("Duplicates: %" PRIu64 " bytes (%" PRIu64" KiB, %" PRIu64
+           " MiB, %" PRIu64 " GiB)\n", used_dups, kb_dups, mb_dups, gb_dups);
     printf("Total used: %" PRIu64 " bytes (%" PRIu64" KiB, %" PRIu64
            " MiB, %" PRIu64 " GiB)\n", used, kb, mb, gb);
   }
