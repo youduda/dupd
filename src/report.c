@@ -543,6 +543,53 @@ void operation_dups()
 
 
 /** ***************************************************************************
+ * Copy string in src to dst with non-printable and non-ascii characters
+ * replaced by C escape sequences and surround with $''. dst equals:
+ * $'<escaped src>'
+ * Destination requires 4 * strlen(src) bytes (for escaping with \nnn of
+ * non-ascii character) + 3 (for $'') + 1 (trailing \0)
+ *
+ * Parameters:
+ *    src        - Source string.
+ *    dst        - Destination with 4 * strlen(src) + 4 bytes available.
+ *
+ * Return: none
+ *
+ */
+void str_escape(char* dst, const char* src)
+{
+  dst[0] = '$';
+  dst[1] = '\'';
+  dst[2] = '\0';
+  for (unsigned char ch = *src; ch; ch = *(++src))
+  {
+    switch (ch)
+    {
+    case '\a': strcat(dst, "\\a"); break;
+    case '\b': strcat(dst, "\\b"); break;
+    case '\f': strcat(dst, "\\f"); break;
+    case '\n': strcat(dst, "\\n"); break;
+    case '\r': strcat(dst, "\\r"); break;
+    case '\t': strcat(dst, "\\t"); break;
+    case '\v': strcat(dst, "\\v"); break;
+    case '\\': strcat(dst, "\\\\"); break;
+    case '\'': strcat(dst, "\\\'"); break;
+    case '\"': strcat(dst, "\\\""); break;
+    case '\?': strcat(dst, "\\?"); break;
+    default:
+      if (' ' <= ch && ch <= '~') {
+        sprintf(dst + strlen(dst), "%c", ch);
+      } else {
+        sprintf(dst + strlen(dst), "\\%03o", ch);
+      }
+      break;
+    }
+  }
+  strcat(dst, "'");
+}
+
+
+/** ***************************************************************************
  * Public function, see report.h
  *
  */
@@ -550,11 +597,13 @@ void operation_shell_script()
 {
   const char * sql = "SELECT paths FROM duplicates";
   char kept[DUPD_PATH_MAX];
+  char * kept_escaped = malloc(DUPD_PATH_MAX * 4 + 4);
   sqlite3_stmt * statement = NULL;
   int rv;
   char * path_list;
   char * pos = NULL;
   char * token;
+  char * token_escaped = malloc(DUPD_PATH_MAX * 4 + 4);
 
   sqlite3 * dbh = open_database(db_path, 0);
   rv = sqlite3_prepare_v2(dbh, sql, -1, &statement, NULL);
@@ -577,24 +626,32 @@ void operation_shell_script()
     path_list = (char *)sqlite3_column_text(statement, 0);
 
     if ((token = strtok_r(path_list, path_sep_string, &pos)) != NULL) {
-      printf("\n#\n# KEEPING: %s\n#\n", token);
+      str_escape(token_escaped, token);
+
+      printf("\n#\n# KEEPING: %s\n#\n", token_escaped);
       if (rmsh_link) {
         snprintf(kept, DUPD_PATH_MAX, "%s", token);
+        str_escape(kept_escaped, kept);
       }
       while ((token = strtok_r(NULL, path_sep_string, &pos)) != NULL) {
-        printf("rm \"%s\"\n", token);
+        str_escape(token_escaped, token);
+        printf("rm %s\n", token_escaped);
 
         switch (rmsh_link) {
         case RMSH_LINK_SOFT:
-          printf("ln -s \"%s\" \"%s\"\n", kept, token);
+          printf("ln -s %s %s\n", kept_escaped, token_escaped);
           break;
         case RMSH_LINK_HARD:
-          printf("ln \"%s\" \"%s\"\n", kept, token);
+          printf("ln %s %s\n", kept_escaped, token_escaped);
           break;
         }
       }
     }
   }
+
+  free(token_escaped);
+  free(kept_escaped);
+
   sqlite3_finalize(statement);
   close_database(dbh);
 }
